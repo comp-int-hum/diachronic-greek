@@ -13,6 +13,7 @@ import pandas
 from gensim.models import Word2Vec
 import numpy as np
 import numpy
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 
 
@@ -27,48 +28,35 @@ if __name__ == "__main__":
     parser.add_argument("--output", dest="output", help="File to save table")
     parser.add_argument("--top_neighbors", dest="top_neighbors", default=10, type=int, help="How many neighbors to return")
     parser.add_argument('--target_words', default=[], nargs="*", help='Words to consider')
+    parser.add_argument("--language_code", default=None)
     args = parser.parse_args()
     
     logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-    #with gzip.open(args.model, "rb") as ifd:
-
-    #    model = torch.load(ifd, map_location=torch.device("cpu"))
-
-    #token2id = {v : k for k, v in model.id2token.items()}
-    #id2token = model.id2token
-    #print(len(id2token), len(token2id))
-    #model.to("cpu")
-    #try:
-    #    embs = list(model.rho.parameters())[0].detach().numpy()
-    #except:
-    #    embs = model.rho.cpu().detach().numpy()
-
-    w2v = Word2Vec.load(args.embeddings)
+    model, tokenizer = None, None
+    if args.language_code:
+        tokenizer = AutoTokenizer.from_pretrained(
+            "facebook/nllb-200-distilled-1.3B", src_lang=args.language_code
+        )
+        model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-1.3B")
         
-    #sims = cosine_similarity(embs)
-    #sims = cosine_similarity(w2v.wv)
+    w2v = Word2Vec.load(args.embeddings)
 
     neighbors = []
-    # w2v_neighbors, neighbors = [], []
-    # words = []
     for w in args.target_words:
-        # i = token2id[w]
-        # row = [w]
-        # for j in list(reversed(numpy.argsort(sims[i]).tolist()))[1:1 + args.top_neighbors]:
-        #     ow = id2token[j]
-        #     op = sims[i][j]
-        #     row.append("{}:{:.02f}".format(ow, op))
-        # neighbors.append(row)
-
         row = [w]
         for ow, op in w2v.wv.most_similar(w, topn=args.top_neighbors):
             row.append("{}:{:.02f}".format(ow, op))
+        if model:
+            for i in range(len(row)):
+                inputs = tokenizer(row[i], return_tensors="pt")
+                translated_tokens = model.generate(
+                    **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("eng_Latn"), max_length=10
+                )
+                tr = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+                row[i] = "{}({})".format(row[i], tr)
         neighbors.append(row)
         
     pd = pandas.DataFrame(neighbors)
-    #w2v_pd = pandas.DataFrame(w2v_neighbors)
     with open(args.output, "wt") as ofd:
         ofd.write(pd.to_latex(index_names=False, index=False, header=False))
-        #ofd.write("\n\n")
-        #ofd.write(w2v_pd.to_latex(index_names=False, index=False, header=False))

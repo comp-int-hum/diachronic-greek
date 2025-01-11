@@ -21,12 +21,13 @@ import pandas
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 import numpy
-
+import torch
 
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", dest="input", help="Input file")
+    #parser.add_argument("--model", dest="model", help="Input file")
 
     parser.add_argument("--num_top_words", dest="num_top_words", type=int, default=10)
     parser.add_argument("--step_size", dest="step_size", type=int, default=1)
@@ -38,6 +39,15 @@ if __name__ == "__main__":
     parser.add_argument("--latex", dest="latex", help="Output file")
     args = parser.parse_args()
 
+    with gzip.open(args.input, "rb") as ifd:
+        model = torch.load(ifd, map_location="cpu")
+    model = model.to("cpu")
+    time_reps = model.evenly_spaced_time_representations(3)
+    topics = model.top_words(time_reps)
+    print(topics.shape)
+    sys.exit()
+
+    
     # load in the various precomputed counts/lookups/etc    
     label_size = 20
     tick_size = 20
